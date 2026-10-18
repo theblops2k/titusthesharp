@@ -10,7 +10,7 @@ Gog: https://www.gog.com/es/game/titus_the_fox_to_marrakech_and_back
 
 ## Primer inicio
 
-1. Ejecuta el juego, presiona en examinar y busca tu copia original.
+1. Ejecuta el port, presiona en examinar y busca tu copia original.
 2. El programa extrae los datos a la carpeta `FILES\` junto al ejecutable.
 
 ## Controles
