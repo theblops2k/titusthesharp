@@ -3,7 +3,9 @@
 Port de *Titus the Fox* (1992) a C# con raylib, derivado de OpenTitus.
 Requiere tu propia copia de *Titus the Fox* (1992). Este programa no incluye los datos del juego.
 Si te gusta el juego, puedes comprarlo en:
-Steam: https://store.steampowered.com/app/711230/Titus_the_Fox/
+
+Steam: https://store.steampowered.com/app/711230/Titus_the_Fox
+
 Gog: https://www.gog.com/es/game/titus_the_fox_to_marrakech_and_back
 
 ## Primer inicio
