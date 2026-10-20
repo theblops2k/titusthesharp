@@ -24,9 +24,28 @@ public static class Menu
         Fonts.Load(Path.GetDirectoryName(path) ?? ".");
         MenuPath = path;
         Texture2D tex = Title.LoadFormat2(path);
+        SolidPassword(ref tex);
         int r = Run(ref tex);
         Raylib.UnloadTexture(tex);
         return r;
+    }
+
+    // El PASSWORD del arte original queda con un degradé: se repinta de un solo color, igual que START
+    static void SolidPassword(ref Texture2D tex)
+    {
+        Image im = Raylib.LoadImageFromTexture(tex);
+        Color sc = StartColour(tex);
+        for (int y = 170; y < 183; y++)
+            for (int x = 120; x < 200; x++)
+            {
+                Color c = Raylib.GetImageColor(im, x, y);
+                if (c.R == 0 && c.G == 0 && c.B == 0) continue; // fondo negro
+                Raylib.ImageDrawPixel(ref im, x, y, sc);
+            }
+        Raylib.UnloadTexture(tex);
+        tex = Raylib.LoadTextureFromImage(im);
+        Raylib.UnloadImage(im);
+        Raylib.SetTextureFilter(tex, TextureFilter.Point);
     }
 
     // sel[0] = (120,160) 8x8; sel[1] = (120,173) 8x8 (menu.c:127-135)
