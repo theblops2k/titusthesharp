@@ -23,6 +23,8 @@ Gog: https://www.gog.com/es/game/titus_the_fox_to_marrakech_and_back
 | Enter / Espacio | Elegir en menús |
 | Ctrl + Alt + E | Pantalla final (en game over) |
 
+Las teclas se pueden redefinir en **OPTIONS → CONTROLLER**. Ahí también se puede elegir joystick: las direcciones salen del D-pad o del stick izquierdo, y saltar/acción se asignan a los botones que quieras (por defecto A y B).
+
 ## Configuración (`TitusTheFox.cfg`)
 
 Se crea solo al primer inicio. Cada clave tiene un comentario encima con su descripción.
@@ -45,6 +47,19 @@ Se crea solo al primer inicio. Cada clave tiene un comentario encima con su desc
 | Scanlines | T / F | Líneas horizontales |
 
 Los cambios desde OPTIONS se aplican al momento. Si editás el archivo a mano, reiniciá el juego.
+
+## Controles (`Controller.cfg`)
+
+Se crea solo al primer inicio, junto al ejecutable, con el teclado por defecto. Se edita desde **OPTIONS → CONTROLLER**; si lo tocás a mano, reiniciá el juego.
+
+| Clave | Valores | Descripción |
+|---|---|---|
+| Device | KEYBOARD / JOYSTICK | Dispositivo con el que se juega |
+| Joystick | 0 a 3 | Índice del joystick (0 = primero conectado) |
+| KeyLeft, KeyRight, KeyDown, KeyUp, KeyAction | Nombre de tecla (Left, Space...) | Teclas de mover, agacharse, saltar y acción |
+| PadJump, PadAction | Número de botón | Botones de saltar y acción en el joystick |
+
+Con joystick, las direcciones salen del D-pad o del stick izquierdo; solo se configuran saltar y acción. Si elegís un joystick y lo desconectás, se vuelve al teclado automáticamente.
 
 ## Compilar
 
@@ -75,15 +90,17 @@ Si el juego se cierra por un error, se escribe `Log_error.txt` junto al ejecutab
 
 ### Jugabilidad
 - **Pausa**: P o ESC abren un menú de pausa centrado con CONTINUE y EXIT. En el original, P pausaba con un tile de pausa sin menú. ESC en el original cerraba el juego; acá no cierra en ninguna pantalla.
+- **Autopause**: al perder el foco la ventana (Alt+Tab, minimizar) se abre el menú de pausa y no se reanuda solo al volver; hay que elegir CONTINUE.
+- **Controles**: se agrega OPTIONS → CONTROLLER para elegir teclado o joystick y redefinir teclas/botones, con la configuración en `Controller.cfg`. El original solo usaba teclado.
 - **Salida**: ESC en el menú principal abre un popup QUIT con YES y NO. En el original, ESC salía directo.
 - **Vidas iniciales**: el original arranca con 2 vidas; el port usa 3 por defecto, configurable con `LivesAtStart` (1 a 30).
 - **Nivel extra**: `FinalExtraLevel` agrega un nivel oculto antes de la pantalla final. Se puede abrir desde el menú con la contraseña `3B9C`, que en el original no se aceptaba.
 - **Pulsaciones**: se filtran las pulsaciones repetidas de P, ESC y los menús, para que una sola pulsación no cuente dos veces.
-- **Menú principal**: se agrega un menú de OPTIONS que no existe en el juego original. Se pueden configurar todos los parámetros del `TitusTheFox.cfg` desde la interfaz del juego.
+- **Menú principal**: se agrega un menú de OPTIONS que no existe en el juego original. Se pueden configurar todos los parámetros del `TitusTheFox.cfg` desde la interfaz del juego. El texto PASSWORD se pintó de un solo color, como START (el original tenía un degradé).
 - **Velocidad**: la lógica sigue a 35 ticks por segundo, como el original, pero el dibujo va a 60 fps (configurable con `Fps`, hasta 240), con interpolación de sprites y fondo. Compatible con WideScreen.
 
 ### Presentación
-- **Ventana**: se abre en 960x600 (escala 3x). Pantalla completa opcional, con vista ampliada (widescreen) que muestra más área del nivel.
+- **Ventana**: se abre en 960x600 (escala 3x). Si el monitor no entra, usa la escala entera menor (2x o 1x) y la centra. Pantalla completa opcional, con vista ampliada (widescreen) que muestra más área del nivel, limitada a 1024 px de ancho (hasta ~48:9; más ancho queda con barras negras).
 - **Filtros de imagen**: Bilinear, Sharp Bilinear, XBR, Scale3x, FSR, Vibrance y Scanlines. Ninguno está activo por defecto.
 
 ### Sonido y datos
@@ -100,8 +117,10 @@ Si el juego se cierra por un error, se escribe `Log_error.txt` junto al ejecutab
 - Extracción automática de los datos del juego, con ventana de progreso y búsqueda de la carpeta original.
 - Ventana centrada, pantalla completa, modo widescreen y escalado entero.
 - Filtros en shaders: Sharp Bilinear, XBR simplificado, FSR, Scale3x y Vibrance.
-- Interpolación de sprites y fondo a 60 fps, con lógica del juego a 35 ticks por segundo.
+- Interpolación de sprites, con lógica del juego a 35 ticks por segundo.
 - Menú de pausa, popup de salida, opciones gráficas y de volumen, con configuración en `TitusTheFox.cfg`.
+- Pantalla CONTROLLER: teclado o joystick, con teclas y botones redefinibles en `Controller.cfg`.
+- Autopause al perder el foco de la ventana, con el menú de pausa.
 - Pausa de la música que continúa desde donde quedó.
 - Registro de errores (`Log_error.txt`).
 - Filtro de pulsaciones para evitar dobles registros de tecla.
