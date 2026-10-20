@@ -211,6 +211,9 @@ public static class Game
             }
             return n;
         }
+
+        // Fraccion de paso de logica ya transcurrida hacia el proximo paso (0..1): mismo criterio que PlayLevelLoop
+        public double Alpha => Math.Clamp(logAcc + acc / TICK_MS * Title.LogicScale, 0.0, 1.0);
     }
 
     static int exitCode; // 0 salir, 2 game over, 3 muerte
@@ -235,7 +238,8 @@ public static class Game
         }
         Render.Draw(level, screen, Scroll.VIEW_W);
         if (sprites && Player.BAR_FLAG != 0) DrawEnergy(level);
-        if (vx0 != 0 || vy0 != 0 || vx1 != 320 || vy1 != 192) MaskOutside(vx0, vy0, vx1, vy1, Scroll.MARGIN, Scroll.VIEW_W);
+        // viewOffset: x de pantalla de la vista de 320 (normalmente MARGIN; 0 si la vista esta topada al borde izquierdo)
+        if (vx0 != 0 || vy0 != 0 || vx1 != 320 || vy1 != 192) MaskOutside(vx0, vy0, vx1, vy1, viewOffset, Scroll.VIEW_W);
         overlay?.Invoke();
         if (fade > 0)
             Raylib.DrawRectangle(0, 0, Scroll.VIEW_W * Render.SCALE, Title.H * Render.SCALE, new Color((byte)0, (byte)0, (byte)0, (byte)Math.Min(255, fade)));
@@ -271,17 +275,21 @@ public static class Game
         UpdateSprite(level, p.sprite, 13, true);
         p.sprite.speedY = 15;
         var tk = new Ticker();
-        for (int i = 0; i < 60;) // 60 pasos de logica a 35/s, dibujo a 60 Hz
+        for (int i = 0; i < 60;) // 60 pasos de logica a 35/s, dibujo a FpsGame (interpolado)
         {
             if (Raylib.WindowShouldClose()) return false;
-            DrawFrame(level, 0, true, 0, 0, 320, 192, Title.FpsGame);
-            for (int n = tk.Due(); n > 0 && i < 60; n--, i++)
+            int due = tk.Due();
+            for (int n = due; n > 0 && i < 60; n--, i++)
             {
+                SnapshotPrev(level); // posicion previa al paso: interpolacion de dibujo
                 p.sprite.speedY--;
                 if (p.sprite.speedY < -16) p.sprite.speedY = -16;
                 p.sprite.y -= p.sprite.speedY;
             }
+            drawAlpha = i >= 60 ? 1.0 : tk.Alpha; // ultimo frame: estado final exacto
+            DrawFrame(level, 0, true, 0, 0, 320, 192, Title.FpsGame);
         }
+        drawAlpha = 1.0; // WAIT_SONG: frames congelados sin interpolar
         if (!WaitSong(level)) return false; // engine.c:400 WAIT_SONG
         Audio.SelectMusic(0); // engine.c:401
         return CloseScreen(level); // engine.c:410 CLOSE_SCREEN
@@ -315,13 +323,17 @@ public static class Game
         for (int i = 0; i < 31;)
         {
             if (Raylib.WindowShouldClose()) return false;
-            DrawFrame(level, 0, true, 0, 0, 320, 192, Title.FpsGame);
-            for (int n = tk.Due(); n > 0 && i < 31; n--, i++)
+            int due = tk.Due();
+            for (int n = due; n > 0 && i < 31; n--, i++)
             {
+                SnapshotPrev(level); // "Game"/"Over" se dibujan en sprite2/sprite3
                 p.sprite2.x += 8;
                 p.sprite3.x -= 8;
             }
+            drawAlpha = i >= 31 ? 1.0 : tk.Alpha; // ultimo frame: estado final exacto
+            DrawFrame(level, 0, true, 0, 0, 320, 192, Title.FpsGame);
         }
+        drawAlpha = 1.0; // espera de tecla: posicion final exacta
         // engine.c:413-434 SCREEN_5C: LCtrl+LAlt+E (sin otras teclas) -> pantalla final + musica 9
         if (Raylib.IsKeyDown(KeyboardKey.LeftControl) && Raylib.IsKeyDown(KeyboardKey.LeftAlt) && Raylib.IsKeyPressed(KeyboardKey.E) && !OtherKeyDown())
         {
@@ -445,6 +457,37 @@ public static class Game
         Title.DrawRegion(tex, Menu.Sel[0], ox + 114, by + 24 + sel * 14, Color.White);
     }
 
+    // Menu de pausa (player.c:130 t_pause): CONTINUE / EXIT. 0 = seguir, 1 = volver al menu, 2 = cerrar el juego
+    static int PauseLevel(TITUS_level level)
+    {
+        var tmp = new TITUS_sprite();
+        Objects.CopySprite(tmp, level.player.sprite);
+        UpdateSprite(level, level.player.sprite, 29, true); // tile de pausa
+        while (Raylib.GetKeyPressed() != 0) { } // vacia la cola (incluye la P)
+        Input.Consume(KeyboardKey.P); Input.Consume(KeyboardKey.Escape); // la tecla que abrio la pausa no se relee
+        if (pauseTex is not Texture2D)
+            pauseTex = Title.LoadFormat2(Menu.MenuPath!); // textura del menu, cargada una vez
+        int psel = 0; bool resume = false, exit = false;
+        Audio.PauseMusic();
+        while (!resume)
+        {
+            if (Raylib.WindowShouldClose()) { Audio.ResumeMusic(); return 2; }
+            if (Input.Pressed(KeyboardKey.Up)) psel = 0;
+            if (Input.Pressed(KeyboardKey.Down)) psel = 1;
+            if (Input.Pressed(KeyboardKey.P, Input.LevelKeyMs) || Input.Pressed(KeyboardKey.Escape, Input.LevelKeyMs)) resume = true; // = CONTINUE
+            else if (Input.Confirm())
+            { resume = true; exit = psel == 1; }
+            var ptex = pauseTex.Value; int ps = psel;
+            DrawFrame(level, 0, true, 0, 0, 320, 192, Title.FpsGame, () => DrawPauseMenu(ptex, ps)); // ultimo frame + recuadro
+        }
+        Audio.ResumeMusic(); // CONTINUE sigue donde quedo; en EXIT el menu cambia la pista despues
+        while (Raylib.GetKeyPressed() != 0) { }
+        Input.Consume(KeyboardKey.P); Input.Consume(KeyboardKey.Escape);
+        if (exit) return 1;
+        Objects.CopySprite(level.player.sprite, tmp);
+        return 0;
+    }
+
     static bool PlayLevelLoop(TITUS_level level)
     {
         // draw.c:319 dibuja a ~70 Hz y la logica corre cada 29 ms (acumulador): aqui dibujo a 60 Hz y logica a 35 ticks/s
@@ -455,33 +498,12 @@ public static class Game
         while (true)
         {
             if (Raylib.WindowShouldClose()) return false;
-            if (Input.Pressed(KeyboardKey.P, Input.LevelKeyMs) || Input.Pressed(KeyboardKey.Escape, Input.LevelKeyMs)) // player.c:130 t_pause; menu de pausa
+            // Autopause: al perder el foco se abre el mismo menu de pausa (reanuda solo con CONTINUE)
+            if (!Raylib.IsWindowFocused() || Input.Pressed(KeyboardKey.P, Input.LevelKeyMs) || Input.Pressed(KeyboardKey.Escape, Input.LevelKeyMs)) // player.c:130 t_pause
             {
-                var tmp = new TITUS_sprite();
-                Objects.CopySprite(tmp, level.player.sprite);
-                UpdateSprite(level, level.player.sprite, 29, true); // tile de pausa
-                while (Raylib.GetKeyPressed() != 0) { } // vacia la cola (incluye la P)
-                Input.Consume(KeyboardKey.P); Input.Consume(KeyboardKey.Escape); // la tecla que abrio la pausa no se relee
-                if (pauseTex is not Texture2D)
-                    pauseTex = Title.LoadFormat2(Menu.MenuPath!); // textura del menu, cargada una vez
-                int psel = 0; bool resume = false, exit = false;
-                Audio.PauseMusic();
-                while (!resume)
-                {
-                    if (Raylib.WindowShouldClose()) return false;
-                    if (Input.Pressed(KeyboardKey.Up)) psel = 0;
-                    if (Input.Pressed(KeyboardKey.Down)) psel = 1;
-                    if (Input.Pressed(KeyboardKey.P, Input.LevelKeyMs) || Input.Pressed(KeyboardKey.Escape, Input.LevelKeyMs)) resume = true; // = CONTINUE
-                    else if (Input.Confirm())
-                    { resume = true; exit = psel == 1; }
-                    var ptex = pauseTex.Value; int ps = psel;
-                    DrawFrame(level, 0, true, 0, 0, 320, 192, Title.FpsGame, () => DrawPauseMenu(ptex, ps)); // ultimo frame + recuadro
-                }
-                Audio.ResumeMusic(); // CONTINUE sigue donde quedo; en EXIT el menu cambia la pista despues
-                while (Raylib.GetKeyPressed() != 0) { }
-                Input.Consume(KeyboardKey.P); Input.Consume(KeyboardKey.Escape);
-                if (exit) { exitCode = 5; return true; } // EXIT: al menu principal (no cierra)
-                Objects.CopySprite(level.player.sprite, tmp);
+                int r = PauseLevel(level);
+                if (r == 2) return false;
+                if (r == 1) { exitCode = 5; return true; } // EXIT: al menu principal (no cierra)
                 last = sw.Elapsed.TotalMilliseconds; acc = 0; logAcc = 0; // sin tiempo acumulado
                 continue;
             }
@@ -539,6 +561,9 @@ public static class Game
     static readonly byte[] prevTiles = new byte[Scroll.TILESCREEN_W * Scroll.TILESCREEN_H];
     static int prevBX, prevBY;
     static int camShiftX, camShiftY; // px: (cam actual - cam interpolada) * 16, sumado a la posicion de sprites
+    // Vista ancha: 'viewLeft' es el px de mundo que cae en x=0 de la pantalla y 'viewOffset' el x de pantalla
+    // donde empieza la vista original de 320 (MARGIN salvo que la vista este topada contra un borde del mapa)
+    static int viewLeft, viewOffset;
 
     static void SnapshotPrevTiles()
     {
@@ -554,11 +579,13 @@ public static class Game
         if (drawAlpha >= 1.0 || (cdx == 0 && cdy == 0) || Math.Abs(cdx) > 1 || Math.Abs(cdy) > 1)
         {
             TfrScreenM();
+            viewLeft = Scroll.BITMAP_X << 4; viewOffset = 0;
             return;
         }
         int sx = (int)Math.Round(cdx * 16 * (1.0 - drawAlpha));
         int sy = (int)Math.Round(cdy * 16 * (1.0 - drawAlpha));
         camShiftX = sx; camShiftY = sy;
+        viewLeft = (Scroll.BITMAP_X << 4) - camShiftX; viewOffset = 0;
         int W = Scroll.screen_width * 16, H = Scroll.screen_height * 16;
         int xm = Scroll.BITMAP_XM * 16, ym = Scroll.BITMAP_YM * 16;
         byte[] ts = Scroll.tilescreen;
@@ -592,7 +619,13 @@ public static class Game
             camShiftY = (int)Math.Round(cdy * 16 * (1.0 - drawAlpha));
         }
         int vw = Scroll.VIEW_W, H = Scroll.TILESCREEN_H;
-        int camX = (Scroll.BITMAP_X << 4) - camShiftX - Scroll.MARGIN, camY = (Scroll.BITMAP_Y << 4) - camShiftY;
+        // Camara interpolada (borde izquierdo de la vista original de 320) y vista ancha topada al mapa:
+        // sin esto, con BITMAP_X=0 (inicio del nivel) el margen izquierdo cae fuera del tilemap y queda negro
+        int camWorld = (Scroll.BITMAP_X << 4) - camShiftX;
+        int maxLeft = Math.Max(0, level.width * 16 - vw);
+        viewLeft = Math.Clamp(camWorld - Scroll.MARGIN, 0, maxLeft);
+        viewOffset = camWorld - viewLeft; // px de pantalla donde empieza la vista de 320 (MARGIN o menos si esta topada)
+        int camX = viewLeft, camY = (Scroll.BITMAP_Y << 4) - camShiftY;
         for (int y = 0; y < H; y++)
         {
             int wy = camY + y, ty = wy >> 4;
@@ -626,9 +659,10 @@ public static class Game
             iy = (int)Math.Round(spr.prevY + (spr.y - spr.prevY) * drawAlpha);
         }
         int dx, dy = iy + spr.spritedata.refheight - h + 1 - (Scroll.BITMAP_Y << 4);
-        if (!spr.flipped) dx = ix - spr.spritedata.refwidth - (Scroll.BITMAP_X << 4);
-        else dx = ix + spr.spritedata.refwidth - w - (Scroll.BITMAP_X << 4);
-        dx += camShiftX + Scroll.MARGIN; dy += camShiftY;
+        // viewLeft ya incluye camShiftX, MARGIN y el tope contra los bordes del mapa
+        if (!spr.flipped) dx = ix - spr.spritedata.refwidth - viewLeft;
+        else dx = ix + spr.spritedata.refwidth - w - viewLeft;
+        dy += camShiftY;
         if (dx >= sw || dx + w < 0 || dy + h < 0 || dy >= sh) return;
 
         byte[] d = spr.spritedata.data!;
