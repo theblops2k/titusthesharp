@@ -167,9 +167,11 @@ public static class Title
         var rt = target!.Value;
         float tw = ViewW * Render.SCALE, th = rt.Texture.Height; // solo la parte usada de la textura
         ViewW = W; // cada frame vuelve a 320 salvo que el nivel (Game.DrawFrame) pida la vista ancha
+        // Ajuste proporcional: ocupa el maximo posible y deja barras negras (letterbox)
         float sw = Raylib.GetScreenWidth(), sh = Raylib.GetScreenHeight();
         float k = Math.Min(sw / tw, sh / th);
         float dw = tw * k, dh = th * k;
+        float ox = (float)Math.Floor((sw - dw) / 2), oy = (float)Math.Floor((sh - dh) / 2); // centrado entero (sin medio pixel)
         Raylib.ClearBackground(Color.Black); // bordes negros (letterbox)
         bool useSh = scaleShader.HasValue;
         if (useSh)
@@ -182,13 +184,13 @@ public static class Title
         }
         Raylib.DrawTexturePro(rt.Texture,
             new Rectangle(0, 0, tw, -th), // RenderTexture esta invertida en Y
-            new Rectangle((sw - dw) / 2, (sh - dh) / 2, dw, dh),
+            new Rectangle(ox, oy, dw, dh),
             System.Numerics.Vector2.Zero, 0f, Color.White);
         if (useSh) Raylib.EndShaderMode();
         // Scanlines=T: una linea negra semitransparente (1 px) al final de cada fila logica escalada
         if (Config.Scanlines() && dh / H >= 2f)
         {
-            float ox = (sw - dw) / 2, oy = (sh - dh) / 2, rowH = dh / H;
+            float rowH = dh / H;
             var sc = new Color(0, 0, 0, 89); // alpha ~0.35
             for (int i = 0; i < H; i++)
                 Raylib.DrawRectangle((int)ox, (int)(oy + (i + 1) * rowH) - 1, (int)dw, 1, sc);
