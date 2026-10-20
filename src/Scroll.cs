@@ -38,12 +38,14 @@ public static class Scroll
     public static int VIEW_W = TILESCREEN_W;
     public static int MARGIN => (VIEW_W - TILESCREEN_W) / 2; // px extra a cada lado
 
-    // Ancho de vista = round(200 * monW / monH) a multiplo de 16; sin ampliar si la pantalla no es mas ancha que 4:3
+    // Ancho de vista = round(200 * monW / monH) a multiplo de 16; sin ampliar si la pantalla no es mas ancha que 4:3.
+    // MAX_VIEW_W cubre hasta ~5:1 (48:9); mas ancho que eso se letterboxea. Siempre <= ancho del tilemap (256 tiles).
+    public const int MAX_VIEW_W = 1024;
     public static void SetViewWidth(int monW, int monH)
     {
-        if (monH <= 0 || monW * 3 <= monH * 4) return;
+        if (monH <= 0 || monW <= 0 || monW * 3 <= monH * 4) return;
         int w = (int)Math.Round(200.0 * monW / monH / 16.0) * 16;
-        VIEW_W = Math.Clamp(w, TILESCREEN_W, 512);
+        VIEW_W = Math.Clamp(w, TILESCREEN_W, MAX_VIEW_W);
     }
 
     // Hook to copy a 16x16 tile into the tile screen; default writes into 'tilescreen'.
