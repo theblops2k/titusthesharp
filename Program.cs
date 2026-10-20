@@ -11,9 +11,26 @@ try
     if (files == null) return;
     string dir = files;
 
+    Controller.Ensure(); // Controller.cfg junto al exe (defaults de teclado si no existe)
+
     Raylib.SetConfigFlags(ConfigFlags.HiddenWindow); // ventana oculta hasta el primer cuadro (Title.ShowWindowOnce)
     Raylib.InitWindow(Title.W * Render.SCALE, Title.H * Render.SCALE, Config.ShowFps() && !Config.FullScreen() ? "Titus The Fox PC - Fps 0" : "Titus The Fox PC");
     Raylib.SetTargetFPS(60);
+
+    // Si el monitor no entra en la ventana de 3x (960x600), abre a una escala entera menor (2x/1x) y la centra.
+    // Solo afecta al tamano de la ventana: el juego se dibuja a 320x200 logicos y Present lo escala a lo que haya.
+    void FitWindow()
+    {
+        int mon = Raylib.GetCurrentMonitor();
+        int mw = Raylib.GetMonitorWidth(mon), mh = Raylib.GetMonitorHeight(mon);
+        if (mw <= 0 || mh <= 0) return;
+        int s = Math.Clamp(Math.Min(mw / Title.W, (mh - 80) / Title.H), 1, Render.SCALE); // -80: barra de tareas
+        if (s >= Render.SCALE) return;
+        int w = Title.W * s, h = Title.H * s;
+        Raylib.SetWindowSize(w, h);
+        Raylib.SetWindowPosition(Math.Max(0, (mw - w) / 2), Math.Max(0, (mh - h) / 2));
+    }
+    FitWindow();
     if (Config.FullScreen() && Config.WideScreen()) // vista ampliada segun la proporcion real del monitor
     {
         int mon = Raylib.GetCurrentMonitor();
@@ -57,6 +74,7 @@ try
             int level = Menu.View(menuPath);
             if (level < 1) break;
             if (!Game.Run(dir, level - 1)) break;
+            Audio.SelectMusic(15); // de vuelta del nivel: corta la musica del juego y pone la del menu principal
         }
     }
 
