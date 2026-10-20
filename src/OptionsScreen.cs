@@ -7,31 +7,38 @@ static class OptionsScreen
 {
     static readonly string[] GfxKeys =
         { "Bilinear", "SharpBilinear", "XBR", "Scale3x", "FSR", "Vibrance", "Scanlines" };
-    // null = fila especial (GRAPHICS en la pantalla principal; BACK siempre al final)
-    static readonly string?[] MainKeys = { "FullScreen", "WideScreen", "Fps", "ShowFps", "LivesAtStart", "FinalExtraLevel", "Volume", null };
+    // null = fila especial (submenus de la pantalla principal; BACK siempre al final)
+    static readonly string?[] MainKeys = { "FullScreen", "WideScreen", "Fps", "ShowFps", "LivesAtStart", "FinalExtraLevel", "Volume", null, null };
+    static readonly string[] MainSpecial = { "CONTROLLER", "GRAPHIC FILTERS" };
 
-    const int Y0 = 26, Step = 14; // 8 filas max: 26 + 7*14 + 12 = 136 <= 200
+    const int Y0 = 26, Step = 14; // 9 filas + BACK: 26 + 9*14 + 12 = 164 <= 200
 
     // Devuelve 0 al volver con ESC/BACK, -1 si se cierra la ventana
     public static int Run(ref Texture2D tex)
     {
         while (true)
         {
-            int r = Page(ref tex, "OPTIONS", MainKeys);
-            if (r != 1) return r;
-            r = Page(ref tex, "GRAPHIC FILTERS", GfxKeys);
+            int r = Page(ref tex, "OPTIONS", MainKeys, MainSpecial);
+            if (r < 1) return r;
+            r = r == 1 ? ControllerScreen.Run(ref tex) : Page(ref tex, "GRAPHIC FILTERS", GfxKeys);
             if (r < 0) return r;
             Menu.WaitRelease(); // BACK del submenu: no reabrir ni propagar la tecla
         }
     }
 
-    // 0 = BACK/ESC, -1 = cerrar ventana, 1 = abrir GRAPHIC FILTERS (solo pagina principal)
-    static int Page(ref Texture2D tex, string title, string?[] keys)
+    // 0 = BACK/ESC, -1 = cerrar ventana, 1.. = submenu especial (indice en special + 1)
+    static int Page(ref Texture2D tex, string title, string?[] keys, string[]? special = null)
     {
         var buf = new byte[Fonts.W * Fonts.H];
         int n = keys.Length, sel = 0;
         var names = new string[n];
-        for (int i = 0; i < n; i++) names[i] = keys[i] == null ? "GRAPHIC FILTERS..." : Config.Description(keys[i]!);
+        for (int i = 0; i < n; i++)
+        {
+            if (keys[i] != null) { names[i] = Config.Description(keys[i]!); continue; }
+            int si = 0;
+            for (int j = 0; j < i; j++) if (keys[j] == null) si++;
+            names[i] = (special != null && si < special.Length ? special[si] : "MENU") + "...";
+        }
         while (Raylib.GetKeyPressed() != 0) { }
         while (true)
         {
@@ -50,7 +57,12 @@ static class OptionsScreen
             }
             else if (keys[sel] == null)
             {
-                if (ok) return 1;
+                if (ok)
+                {
+                    int si = 0;
+                    for (int j = 0; j < sel; j++) if (keys[j] == null) si++;
+                    return si + 1;
+                }
                 d = 0;
             }
             if (d != 0 && keys[sel] != null && Change(keys[sel]!, d))
