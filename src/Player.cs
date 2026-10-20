@@ -84,11 +84,12 @@ public static class Player
 
     static void subto0(ref byte v) { if (v != 0) v--; }
 
-    static bool KeyLeft() => Raylib.IsKeyDown(KeyboardKey.Left);
-    static bool KeyRight() => Raylib.IsKeyDown(KeyboardKey.Right);
-    static bool KeyUp() => Raylib.IsKeyDown(KeyboardKey.Up);
-    static bool KeyDown() => Raylib.IsKeyDown(KeyboardKey.Down);
-    static bool KeySpace() => Raylib.IsKeyDown(KeyboardKey.Space);
+    // Teclado o joystick segun Controller.cfg (ver Controller.cs)
+    static bool KeyLeft() => Controller.Left();
+    static bool KeyRight() => Controller.Right();
+    static bool KeyUp() => Controller.Jump();
+    static bool KeyDown() => Controller.Crouch();
+    static bool KeySpace() => Controller.Action();
     static short add_carry() => (short)(CARRY_FLAG ? 16 : 0);
 
     // player.c:57 move_player (partes 1, 2, 3 y 5 reducidas)
