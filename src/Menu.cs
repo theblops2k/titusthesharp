@@ -11,11 +11,7 @@ public static class Menu
     // Password (seleccion 1, menu.c:260-273): enterpassword; si es valido fija curlevel y vuelve al menu.
     static int curlevel = 1;
 
-    internal static readonly string[] LevelCode =
-    {
-        "EFE8", "5165", "67D4", "2BDA", "11E5", "86EE", "4275", "A0B9",
-        "501C", "E9ED", "D4E6", "A531", "CE96", "B1A4", "EBEA", "3B9C",
-    };
+    // Codigos de contrasena por nivel: Game.LevelCodes (se recalcula si cambia FinalExtraLevel)
 
     internal static string? MenuPath; // para que Game cargue la textura del menu (menu de pausa)
 
@@ -153,10 +149,20 @@ public static class Menu
         while (true)
         {
             if (Raylib.WindowShouldClose()) return true;
-            if (Input.Pressed(KeyboardKey.Escape)) return false;
-            if (Input.Pressed(KeyboardKey.Up)) q = Math.Max(0, q - 1);
-            if (Input.Pressed(KeyboardKey.Down)) q = Math.Min(1, q + 1);
-            if (Input.Confirm()) return q == 0;
+            Input.UpdatePad();
+            if (Input.Pressed(KeyboardKey.Escape) || Input.PadEscape()) return false;
+            if (Input.Pressed(KeyboardKey.Up) || Input.PadUp()) q = Math.Max(0, q - 1);
+            if (Input.Pressed(KeyboardKey.Down) || Input.PadDown()) q = Math.Min(1, q + 1);
+            if (Input.Confirm() || Input.PadConfirm())
+            {
+                // descarta el boton/tecla que eligio YES/NO: si no, el menu ejecuta la opcion
+                // que estaba seleccionada (por ejemplo entraba a OPTIONS al elegir NO)
+                Input.ConsumePad();
+                Input.Consume(KeyboardKey.Enter);
+                Input.Consume(KeyboardKey.KpEnter);
+                Input.Consume(KeyboardKey.Space);
+                return q == 0;
+            }
             Draw(tex, 255, selection, false, q);
         }
     }
@@ -192,10 +198,11 @@ public static class Menu
             while (!chosen)
             {
                 if (Raylib.WindowShouldClose()) return -1;
-                if (Input.Pressed(KeyboardKey.Up)) selection = Math.Max(0, selection - 1);
-                if (Input.Pressed(KeyboardKey.Down)) selection = Math.Min(2, selection + 1);
-                if (Input.Pressed(KeyboardKey.Escape) && QuitPopup(tex, selection)) return -1;
-                if (Input.Confirm())
+                Input.UpdatePad();
+                if (Input.Pressed(KeyboardKey.Up) || Input.PadUp()) selection = Math.Max(0, selection - 1);
+                if (Input.Pressed(KeyboardKey.Down) || Input.PadDown()) selection = Math.Min(2, selection + 1);
+                if ((Input.Pressed(KeyboardKey.Escape) || Input.PadEscape()) && QuitPopup(tex, selection)) return -1;
+                if (Input.Confirm() || Input.PadConfirm())
                     chosen = true;
                 Draw(tex, 255, selection, false);
             }
@@ -211,7 +218,7 @@ public static class Menu
             int pr = EnterPassword();
             if (pr < 0) return pr;
             WaitRelease();
-            if (pr > 0 && pr <= Math.Min(Math.Max(Game.LevelCount, Game.ExtraIndex + 1), LevelCode.Length)) curlevel = pr;
+            if (pr > 0 && pr <= Math.Min(Math.Max(Game.LevelCount, Game.ExtraIndex + 1), Game.LevelCodes.Length)) curlevel = pr;
             selection = 0;
         }
 
@@ -243,13 +250,14 @@ public static class Menu
         Title.End();
     }
 
-    // waitforbutton (keyboard.c:45): Enter/Espacio = 0, ESC/cierre = -1
+    // waitforbutton (keyboard.c:45): Enter/Espacio (o boton A) = 0, ESC/cierre = -1
     static int WaitForButton(byte[] buf)
     {
         while (true)
         {
             if (Raylib.WindowShouldClose()) return -1;
-            if (Input.Confirm()) return 0;
+            Input.UpdatePad();
+            if (Input.Skip()) return 0;
             Present(buf);
         }
     }
@@ -263,7 +271,8 @@ public static class Menu
         for (int i = 0; i < 4;)
         {
             if (Raylib.WindowShouldClose()) return -1;
-            if (Input.Pressed(KeyboardKey.Escape)) return 0; // ESC vuelve al menu
+            Input.UpdatePad();
+            if (Input.Pressed(KeyboardKey.Escape) || Input.PadEscape()) return 0; // ESC o el boton MENU vuelven al menu
             int ch;
             while ((ch = Raylib.GetCharPressed()) != 0 && i < 4)
             {
@@ -274,10 +283,10 @@ public static class Menu
             Present(buf);
         }
         string c = new string(code);
-        int n = Math.Min(Math.Max(Game.LevelCount, Game.ExtraIndex + 1), LevelCode.Length);
+        int n = Math.Min(Math.Max(Game.LevelCount, Game.ExtraIndex + 1), Game.LevelCodes.Length);
         for (int k = 0; k < n; k++)
         {
-            if (c != LevelCode[k]) continue;
+            if (c != Game.LevelCodes[k]) continue;
             Fonts.Print(buf, "LEVEL", 103, 104);
             string num = (k + 1).ToString();
             Fonts.Print(buf, num, 199 - 8 * num.Length, 104);

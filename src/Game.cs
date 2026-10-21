@@ -5,20 +5,43 @@ namespace TitusTheFox;
 // Port parcial de engine.c: playtitus() (carga) y playlevel() (bucle). Sin fisica, enemigos ni objetos.
 public static class Game
 {
+    public const string ExtraLevelCode = "3B9C"; // codigo del nivel extra (LEVELD)
+
     // titus.conf:20-36: orden de los 15 niveles de Titus (indice = levelnumber)
-    // Con FinalExtraLevel=T en el cfg se agrega LEVELD al final (calculado al iniciar)
+    // Con FinalExtraLevel=T en el cfg se agrega LEVELD antes del ending (LEVELG, no jugable)
     static string[] LevelFiles = BuildLevelFiles();
-    // Recalcula la lista de niveles (y LevelCount) tras cambiar FinalExtraLevel
-    public static void RefreshLevels() => LevelFiles = BuildLevelFiles();
+    // Codigos de contrasena por nivel (menu.c): el del nivel extra es siempre 3B9C
+    internal static string[] LevelCodes = BuildLevelCodes();
+    // Recalcula la lista de niveles y de codigos tras cambiar FinalExtraLevel
+    public static void RefreshLevels()
+    {
+        LevelFiles = BuildLevelFiles();
+        LevelCodes = BuildLevelCodes();
+    }
 
     static string[] BuildLevelFiles()
     {
         var l = new List<string>
         {
             "LEVEL0", "LEVELJ", "LEVEL1", "LEVEL2", "LEVEL3", "LEVEL4", "LEVEL5", "LEVEL6",
-            "LEVEL7", "LEVEL8", "LEVEL9", "LEVELB", "LEVELC", "LEVELE", "LEVELG",
+            "LEVEL7", "LEVEL8", "LEVEL9", "LEVELB", "LEVELC", "LEVELE",
         };
-        if (Config.FinalExtraLevel()) l.Add("LEVELD");
+        if (Config.FinalExtraLevel()) l.Add("LEVELD"); // el nivel extra se juega antes del ending
+        l.Add("LEVELG"); // ending: no es jugable (reset.c:68), siempre el ultimo
+        return l.ToArray();
+    }
+
+    static string[] BuildLevelCodes()
+    {
+        // Codigos originales de los 15 niveles de Titus (settings.c:240-254). El ultimo (EBEA) es el del ending.
+        var l = new List<string>
+        {
+            "EFE8", "5165", "67D4", "2BDA", "11E5", "86EE", "4275", "A0B9",
+            "501C", "E9ED", "D4E6", "A531", "CE96", "B1A4", "EBEA",
+        };
+        // Con el nivel extra activo se juega antes del ending, asi que su codigo va delante del del ending (EBEA).
+        // Sin el nivel extra, su codigo no existe: la contrasena 3B9C no funciona.
+        if (Config.FinalExtraLevel()) l.Insert(l.Count - 1, ExtraLevelCode);
         return l.ToArray();
     }
 
@@ -26,18 +49,14 @@ public static class Game
 
     /// engine.c:74 playtitus(firstlevel) + playlevel(). firstlevel es 0-based (retval-1).
     /// Devuelve false si se cerro la ventana.
-    public const int ExtraIndex = 15; // posicion de LEVELD (codigo 3B9C)
+    public const int ExtraIndex = 14; // posicion de LEVELD (codigo 3B9C), antes del ending
     public static int LevelCount => LevelFiles.Length;
 
     static string Original_Dir = "";
 
     public static bool Run(string dir, int firstlevel)
     {
-        // Codigo 3B9C (indice 15): LEVELD por contrasena aunque no este en la secuencia; solo ese nivel
-        bool extraOnly = firstlevel == ExtraIndex && LevelFiles.Length == ExtraIndex;
-        string[] files = extraOnly ? new[] { "LEVELD" } : LevelFiles;
-        int baseIdx = extraOnly ? ExtraIndex : 0;
-        if (firstlevel < 0 || (!extraOnly && firstlevel >= LevelFiles.Length)) return true;
+        if (firstlevel < 0 || firstlevel >= LevelFiles.Length) return true;
         Original_Dir = dir;
 
         Original.InitOriginal();
@@ -60,11 +79,14 @@ public static class Game
         Render.Init();
         bool ok = true;
         // engine.c:136 bucle de niveles: avanza mientras NEWLEVEL_FLAG termine el nivel
-        for (level.levelnumber = (short)firstlevel; level.levelnumber < (extraOnly ? ExtraIndex + 1 : LevelFiles.Length) && ok; level.levelnumber++)
+        for (level.levelnumber = (short)firstlevel; level.levelnumber < LevelFiles.Length && ok; level.levelnumber++)
         {
-        string lfile = files[level.levelnumber - baseIdx];
+        string lfile = LevelFiles[level.levelnumber];
         level.levelid = Original.GetLevelId(level.levelnumber);
-        if (level.levelid < 0 && lfile == "LEVELD") level.levelid = 13; // LEVELD no esta en levelid_titus: id = letra D (13)
+        // Los 2 ultimos niveles no siguen la correspondencia por numero (el nivel extra se coloca antes
+        // del ending): LEVELD = 13 (letra D) y LEVELG = 16 (el ending, reset.c:68).
+        if (lfile == "LEVELD") level.levelid = 13;
+        else if (lfile == "LEVELG") level.levelid = 16;
         byte[] leveldata = File.ReadAllBytes(Path.Combine(dir, lfile + ".bin"));
         Level.LoadLevel(level, leveldata, sprites, objects);
         Crash.SetLevel(level); // CrashLog.cs: contexto de crash
@@ -80,7 +102,8 @@ public static class Game
             if (!OpenScreen(level)) { ok = false; break; } // draw.c:485 (INIT_SCREENM)
             if (!PlayLevel(level)) { ok = false; break; }
             if (exitCode == 5) break; // ESC: al menu
-            if (Gates.NEWLEVEL_FLAG && (!WaitSong(level) || !CloseScreen(level))) { ok = false; break; } // gates.c:65-68 SELECT_MUSIC(4) + WAIT_SONG + CLOSE_SCREEN
+            // tras el ending se pasa directo a la pantalla final (en el original no hay WAIT_SONG/CLOSE_SCREEN: reset.c:68-177)
+            if (Gates.NEWLEVEL_FLAG && !EndingPlayed && (!WaitSong(level) || !CloseScreen(level))) { ok = false; break; } // gates.c:65-68 SELECT_MUSIC(4) + WAIT_SONG + CLOSE_SCREEN
             if (exitCode == 3) // RESETLEVEL_FLAG == 1: muerte con vidas restantes
             {
                 level.lives--;
@@ -94,7 +117,7 @@ public static class Game
         if (exitCode == 2 || exitCode == 5) break; // game over / ESC: al menu
         }
         // engine.c:255-258: tras el ultimo nivel (no por game over ni salida) pantalla final (titus.conf:69 LEVELA.SQZ, formato 0)
-        if (ok && exitCode != 2 && exitCode != 5 && !extraOnly && level.levelnumber >= LevelFiles.Length)
+        if (ok && exitCode != 2 && exitCode != 5 && level.levelnumber >= LevelFiles.Length)
             ok = Title.ViewUntilKey(Path.Combine(dir, "LEVELA.bin"));
         return ok;
     }
@@ -106,9 +129,12 @@ public static class Game
         var buf = new byte[Fonts.W * Fonts.H];
         Fonts.ViewStatus(buf, level);
         while (Raylib.GetKeyPressed() != 0) { }
-        while (Raylib.GetKeyPressed() == 0)
+        Input.ConsumePad(); // descarta el boton del pad que salto la pantalla anterior
+        while (true)
         {
             if (Raylib.WindowShouldClose()) return false;
+            Input.UpdatePad();
+            if (Raylib.GetKeyPressed() != 0 || Input.PadAnyButton()) break; // cualquier tecla o boton del pad
             Title.Begin();
             Raylib.ClearBackground(Color.Black);
             Render.Draw(OriginalTables.PaletteFontColour, buf);
@@ -138,12 +164,13 @@ public static class Game
         Fonts.Print(buf, "LEVEL", 13 * 8, 13 * 8);
         Fonts.Print(buf, num, 25 * 8 - num.Length * 8, 13 * 8);
         Fonts.Print(buf, "CODE", 14 * 8, 10 * 8);
-        Fonts.Print(buf, Menu.LevelCode[levelIndex], 20 * 8, 10 * 8);
+        Fonts.Print(buf, LevelCodes[levelIndex], 20 * 8, 10 * 8);
         while (Raylib.GetKeyPressed() != 0) { }
         while (true)
         {
             if (Raylib.WindowShouldClose()) return false;
-            if (Input.Confirm()) break;
+            Input.UpdatePad();
+            if (Input.Skip()) break;
             Title.Begin();
             Raylib.ClearBackground(Color.Black);
             Render.Draw(OriginalTables.PaletteFontColour, buf);
@@ -193,7 +220,7 @@ public static class Game
     }
 
     // Pasos de logica a 35/s (original) independientes de la tasa de dibujo (60 Hz)
-    sealed class Ticker
+    internal sealed class Ticker
     {
         static double TICK_MS => Title.TickMs; // 1000 / FpsGame
         readonly System.Diagnostics.Stopwatch sw = System.Diagnostics.Stopwatch.StartNew();
@@ -219,7 +246,7 @@ public static class Game
     static int exitCode; // 0 salir, 2 game over, 3 muerte
 
     // Dibuja un frame completo (tiles, sprites, barra de energia, fundido opcional)
-    static void DrawFrame(TITUS_level level, int fade = 0, bool sprites = true, int vx0 = 0, int vy0 = 0, int vx1 = 320, int vy1 = 192, int hz = 0, Action? overlay = null)
+    internal static void DrawFrame(TITUS_level level, int fade = 0, bool sprites = true, int vx0 = 0, int vy0 = 0, int vx1 = 320, int vy1 = 192, int hz = 0, Action? overlay = null)
     {
         if (screen.Length != Scroll.VIEW_W * Scroll.TILESCREEN_H) screen = new byte[Scroll.VIEW_W * Scroll.TILESCREEN_H];
         Title.ViewW = Scroll.VIEW_W; // vista ancha solo en el nivel (Title.Present lo restablece a 320)
@@ -301,7 +328,8 @@ public static class Game
         while (!Audio.SongDone)
         {
             if (Raylib.WindowShouldClose()) return false;
-            if (Input.Pressed(KeyboardKey.Escape)) break;
+            Input.UpdatePad();
+            if (Input.Pressed(KeyboardKey.Escape) || Input.PadEscape()) break; // ESC o START: no esperar
             DrawFrame(level, 0, true, 0, 0, 320, 192, Title.FpsGame);
         }
         return true;
@@ -344,8 +372,9 @@ public static class Game
         while (true) // waitforbutton
         {
             if (Raylib.WindowShouldClose()) return false;
+            Input.UpdatePad();
             DrawFrame(level, 0, true, 0, 0, 320, 192, Title.FpsGame);
-            if (Raylib.GetKeyPressed() != 0) break;
+            if (Raylib.GetKeyPressed() != 0 || Input.PadAnyButton()) break;
         }
         return FadeOut(level);
     }
@@ -364,6 +393,7 @@ public static class Game
         Scroll.XLIMIT_SCROLL = 0;
         Scroll.YLIMIT_SCROLL = 0;
         Scroll.LAST_ORDER = 0;
+        EndingPlayed = false;
         Player.Init();
 
         // reset.c:340-371 SET_ALL_SPRITES (jugador)
@@ -418,13 +448,19 @@ public static class Game
     // Interpolacion de dibujo: alpha 0..1 entre el estado previo y el actual (1 = sin interpolar)
     static double drawAlpha = 1.0;
 
+    // Lo usa la cinematica final (Ending.cs) para dibujar con la interpolacion del tick
+    internal static void SetDrawAlpha(double a) => drawAlpha = a;
+
+    // reset.c:68: el nivel 15 (LEVELG, levelid 16) no es jugable, es el ending (Ending.cs)
+    internal static bool EndingPlayed;
+
     static bool PlayLevel(TITUS_level level)
     {
         try { return PlayLevelLoop(level); }
         finally { drawAlpha = 1.0; }
     }
 
-    static void SnapshotPrev(TITUS_level level)
+    internal static void SnapshotPrev(TITUS_level level)
     {
         foreach (var el in level.elevator) { el.sprite.prevX = el.sprite.x; el.sprite.prevY = el.sprite.y; }
         foreach (var o in level.@object) { o.sprite.prevX = o.sprite.x; o.sprite.prevY = o.sprite.y; }
@@ -472,10 +508,12 @@ public static class Game
         while (!resume)
         {
             if (Raylib.WindowShouldClose()) { Audio.ResumeMusic(); return 2; }
-            if (Input.Pressed(KeyboardKey.Up)) psel = 0;
-            if (Input.Pressed(KeyboardKey.Down)) psel = 1;
-            if (Input.Pressed(KeyboardKey.P, Input.LevelKeyMs) || Input.Pressed(KeyboardKey.Escape, Input.LevelKeyMs)) resume = true; // = CONTINUE
-            else if (Input.Confirm())
+            Input.UpdatePad();
+            if (Input.Pressed(KeyboardKey.Up) || Input.PadUp()) psel = 0;
+            if (Input.Pressed(KeyboardKey.Down) || Input.PadDown()) psel = 1;
+            // P/ESC/START = CONTINUE
+            if (Input.Pressed(KeyboardKey.P, Input.LevelKeyMs) || Input.Pressed(KeyboardKey.Escape, Input.LevelKeyMs) || Input.PadEscape()) resume = true;
+            else if (Input.Confirm() || Input.PadConfirm())
             { resume = true; exit = psel == 1; }
             var ptex = pauseTex.Value; int ps = psel;
             DrawFrame(level, 0, true, 0, 0, 320, 192, Title.FpsGame, () => DrawPauseMenu(ptex, ps)); // ultimo frame + recuadro
@@ -490,6 +528,17 @@ public static class Game
 
     static bool PlayLevelLoop(TITUS_level level)
     {
+        // reset.c:68: el nivel 15 (LEVELG) no se juega, es la cinematica final (ending)
+        if (level.levelid == 16)
+        {
+            int r = Ending.Run(level);
+            if (r == Ending.Closed) return false;                              // ventana cerrada
+            if (r == Ending.ToMenu) { exitCode = 5; return true; }              // ESC: al menu principal
+            Gates.NEWLEVEL_FLAG = true;                                         // engine.c:199: nivel terminado
+            EndingPlayed = true;
+            exitCode = 4;                                                       // como al cruzar la puerta
+            return true;
+        }
         // draw.c:319 dibuja a ~70 Hz y la logica corre cada 29 ms (acumulador): aqui dibujo a 60 Hz y logica a 35 ticks/s
         double TICK_MS = Title.TickMs; // 1000 / FpsGame
         var sw = System.Diagnostics.Stopwatch.StartNew();
@@ -499,7 +548,8 @@ public static class Game
         {
             if (Raylib.WindowShouldClose()) return false;
             // Autopause: al perder el foco se abre el mismo menu de pausa (reanuda solo con CONTINUE)
-            if (!Raylib.IsWindowFocused() || Input.Pressed(KeyboardKey.P, Input.LevelKeyMs) || Input.Pressed(KeyboardKey.Escape, Input.LevelKeyMs)) // player.c:130 t_pause
+            Input.UpdatePad(); // flancos del pad (START = ESC, D-pad, A)
+            if (!Raylib.IsWindowFocused() || Input.Pressed(KeyboardKey.P, Input.LevelKeyMs) || Input.Pressed(KeyboardKey.Escape, Input.LevelKeyMs) || Input.PadEscape()) // player.c:130 t_pause
             {
                 int r = PauseLevel(level);
                 if (r == 2) return false;

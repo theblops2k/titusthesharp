@@ -19,14 +19,15 @@ static class ControllerScreen
         {
             if (Raylib.WindowShouldClose()) return -1;
             int n = Rows().Length;
-            if (Input.Pressed(KeyboardKey.Escape)) return 0;
-            if (Input.Pressed(KeyboardKey.Up)) sel = (sel + n) % (n + 1);
-            if (Input.Pressed(KeyboardKey.Down)) sel = (sel + 1) % (n + 1);
+            Input.UpdatePad();
+            if (Input.Pressed(KeyboardKey.Escape) || Input.PadEscape()) return 0;
+            if (Input.Pressed(KeyboardKey.Up) || Input.PadUp()) sel = (sel + n) % (n + 1);
+            if (Input.Pressed(KeyboardKey.Down) || Input.PadDown()) sel = (sel + 1) % (n + 1);
 
-            bool ok = Input.Confirm(); // se lee una sola vez (Pressed consume el evento)
+            bool ok = Input.Confirm() || Input.PadConfirm(); // se lee una sola vez (Pressed consume el evento)
             int d = 0;
-            if (ok || Input.Pressed(KeyboardKey.Right)) d = 1;
-            if (Input.Pressed(KeyboardKey.Left)) d = -1;
+            if (Input.Pressed(KeyboardKey.Right) || Input.PadRight()) d = 1;
+            if (Input.Pressed(KeyboardKey.Left) || Input.PadLeft()) d = -1;
 
             if (sel == n)
             {
@@ -34,7 +35,11 @@ static class ControllerScreen
             }
             else if (sel == 0)
             {
-                if (d != 0) CycleDevice(d);
+                // DEVICE: confirmar = pasar al joystick, izquierda = teclado, derecha = otro pad.
+                // (Antes "confirmar" hacia de derecha y con un solo pad el ciclo daba la vuelta:
+                //  pulsar Enter dos veces volvia a KEYBOARD y se guardaba asi.)
+                if (ok) CycleDevice(0);
+                else if (d != 0) CycleDevice(d);
             }
             else if (ok || d == 1)
             {
@@ -60,32 +65,50 @@ static class ControllerScreen
         return new[]
         {
             ("DEVICE", DeviceLabel()),
-            ("JUMP", Controller.ButtonName(Controller.PadJump)),
-            ("ACTION", Controller.ButtonName(Controller.PadAction)),
+            // los nombres del boton dependen del mando: Xbox (A, B, X, Y) o PlayStation (CRUZ, CIRCULO...)
+            ("JUMP", USBClass.ButtonName(Controller.PadJump, Controller.Joystick)),
+            ("ACTION", USBClass.ButtonName(Controller.PadAction, Controller.Joystick)),
         };
     }
 
-    // "PAD 1", "PAD 2"... segun el orden de los joysticks conectados
+    // Tipo del mando y el indice con el que se identifica: "SONY 0", "MICROSOFT 1"...
+    // OJO: la fuente del juego no tiene '#' (todo lo que no esta en 0-9 A-Z ! ? . $ _ cae en '?'),
+    // asi que el indice va separado con un espacio.
     static string DeviceLabel()
     {
-        int ord = Controller.Pads().IndexOf(Controller.Joystick);
-        return ord >= 0 ? "PAD " + (ord + 1) : "PAD ?";
+        if (Controller.Device != Controller.JoystickDev) return "KEYBOARD";
+        int idx = Controller.Joystick;
+        if (Controller.Pads().IndexOf(idx) < 0) return "NOT CONNECTED";
+        return USBClass.Label(idx) + " " + idx;
     }
 
     static string KeyName(KeyboardKey k) => k.ToString().ToUpperInvariant();
 
     // ---------------------------------------------------------------- dispositivo
-    // Cicla KEYBOARD -> PAD 1 -> PAD 2 -> ... -> KEYBOARD
+    // d = 0: pasar al joystick (primer pad si no habia ninguno)
+    // d = -1: al teclado (o al pad anterior)
+    // d = +1: al siguiente pad (nunca vuelve al teclado: con un solo pad el ciclo daba la vuelta
+    //        y pulsar Enter dos veces dejaba el dispositivo en KEYBOARD)
     static void CycleDevice(int d)
     {
         var pads = Controller.Pads();
         if (pads.Count == 0) { Controller.Device = Controller.Keyboard; Controller.Save(); return; }
         int cur = Controller.Device == Controller.JoystickDev ? pads.IndexOf(Controller.Joystick) : -1;
-        int next = cur + d;
-        if (next < -1) next = pads.Count - 1;
-        if (next >= pads.Count) next = -1;
-        if (next < 0) Controller.Device = Controller.Keyboard;
-        else { Controller.Device = Controller.JoystickDev; Controller.Joystick = pads[next]; }
+        if (d == 0)
+        {
+            Controller.Device = Controller.JoystickDev;
+            if (cur < 0) Controller.Joystick = pads[0];
+        }
+        else if (d < 0)
+        {
+            if (cur <= 0) Controller.Device = Controller.Keyboard;
+            else { Controller.Device = Controller.JoystickDev; Controller.Joystick = pads[cur - 1]; }
+        }
+        else
+        {
+            if (cur + 1 < pads.Count) { Controller.Device = Controller.JoystickDev; Controller.Joystick = pads[cur + 1]; }
+            else if (cur < 0) { Controller.Device = Controller.JoystickDev; Controller.Joystick = pads[0]; }
+        }
         Controller.Save();
     }
 
@@ -93,6 +116,8 @@ static class ControllerScreen
     static void Capture(ref Texture2D tex, byte[] buf, int row)
     {
         bool pad = Controller.Device == Controller.JoystickDev;
+        int action = RowAction(row);
+        string error = "";
         var prev = new bool[32];
         if (pad) for (int i = 0; i < prev.Length; i++) prev[i] = Raylib.IsGamepadButtonDown(Controller.Joystick, (GamepadButton)i);
         while (Raylib.GetKeyPressed() != 0) { } // descarta el ENTER/ESPACIO que abrio la captura (si no, se asigna solo)
@@ -109,34 +134,48 @@ static class ControllerScreen
                     if (down && !prev[i]) hit = i;
                     prev[i] = down;
                 }
-                if (hit >= 0) { Assign(row, hit); Controller.Save(); break; }
+                if (hit >= 0)
+                {
+                    // un boton no puede controlar dos acciones (ni ser del D-pad, que es de las direcciones)
+                    if (Controller.AssignPad(action, hit)) { Controller.Save(); break; }
+                    error = "BUTTON ALREADY IN USE";
+                }
             }
             else
             {
                 int k = Raylib.GetKeyPressed();
-                if (k > 0) { Assign(row, k); Controller.Save(); break; }
+                if (k > 0)
+                {
+                    // una tecla no puede controlar dos acciones
+                    if (Controller.AssignKey(action, (KeyboardKey)k)) { Controller.Save(); break; }
+                    error = "KEY ALREADY IN USE";
+                }
             }
-            Page(ref tex, buf, row, pad ? "PRESS A BUTTON..." : "PRESS A KEY...");
+            string msg = error.Length > 0 ? error : (pad ? "PRESS A BUTTON..." : "PRESS A KEY...");
+            Page(ref tex, buf, row, msg);
         }
         while (Raylib.GetKeyPressed() != 0) { }
     }
 
-    static void Assign(int row, int code)
+    // Fila de la pantalla -> accion (segun el dispositivo)
+    static int RowAction(int row)
     {
         if (Controller.Device == Controller.Keyboard)
-        {
-            var k = (KeyboardKey)code;
-            switch (row)
+            return row switch
             {
-                case 1: Controller.KeyLeft = k; break;
-                case 2: Controller.KeyRight = k; break;
-                case 3: Controller.KeyDown = k; break;
-                case 4: Controller.KeyUp = k; break;
-                case 5: Controller.KeyAction = k; break;
-            }
-        }
-        else if (row == 1) Controller.PadJump = code;
-        else if (row == 2) Controller.PadAction = code;
+                1 => Controller.ActLeft,
+                2 => Controller.ActRight,
+                3 => Controller.ActCrouch,
+                4 => Controller.ActJump,
+                5 => Controller.ActAction,
+                _ => -1,
+            };
+        return row switch
+        {
+            1 => Controller.ActJump,
+            2 => Controller.ActAction,
+            _ => -1,
+        };
     }
 
     // ---------------------------------------------------------------- dibujo
@@ -158,22 +197,10 @@ static class ControllerScreen
         int cy = Y0 + sel * Step + (Fonts.CH - 8) / 2;
         Texture2D t = tex; // copia: un parametro ref no se puede capturar en la lambda
         int backY = Y0 + n * Step;
-        string info = Controller.Device == Controller.Keyboard ? "" : PadInfo();
         Menu.Present(buf, () =>
         {
             Menu.OverlayText(t, "BACK", 52, backY);
-            if (info.Length > 0) Menu.OverlayText(t, info, 52, 184);
             Title.DrawRegion(t, Menu.Sel[0], 40, cy, Color.White);
         });
-    }
-
-    // Nombre + indice del pad elegido (para distinguir dos joysticks iguales)
-    static string PadInfo()
-    {
-        if (Controller.Pads().IndexOf(Controller.Joystick) < 0)
-            return "PAD " + (Controller.Joystick + 1) + " NOT CONNECTED";
-        string name = Controller.PadName(Controller.Joystick).ToUpperInvariant();
-        string s = (name.Length > 0 ? name : "JOYSTICK") + " [ID " + Controller.Joystick + "]";
-        return s.Length > MaxLen ? s[..MaxLen] : s;
     }
 }

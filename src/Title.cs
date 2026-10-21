@@ -88,7 +88,8 @@ public static class Title
             while (true)
             {
                 if (Raylib.WindowShouldClose()) return false;
-                if (Input.Confirm()) break;
+                Input.UpdatePad();
+                if (Input.Skip()) break;
                 Frame(tex, 255);
             }
             long t0 = Environment.TickCount64;
@@ -113,7 +114,8 @@ public static class Title
         while (alpha < 255 && active) // fundido de entrada
         {
             if (Raylib.WindowShouldClose()) return false; // viewimage.c:154-157
-            if (Input.Confirm())
+            Input.UpdatePad();
+            if (Input.Skip())
             {
                 active = false;
                 fadeoutskip = 255 - alpha;
@@ -125,7 +127,8 @@ public static class Title
         while (active) // visible
         {
             if (Raylib.WindowShouldClose()) return false;
-            if (Input.Confirm())
+            Input.UpdatePad();
+            if (Input.Skip())
                 active = false;
             Frame(tex, 255);
             if (Environment.TickCount64 - t0 + FadeTime >= delay) active = false;
@@ -459,7 +462,8 @@ public static class Title
             while (true)
             {
                 if (Raylib.WindowShouldClose()) return false;
-                if (Input.Confirm())
+                Input.UpdatePad();
+                if (Input.Skip())
                     break;
                 Begin();
                 Raylib.ClearBackground(Color.Black);

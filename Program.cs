@@ -41,6 +41,12 @@ try
     // ESC lo gestionan Title/Menu: se desactiva la tecla de salida por defecto
     Raylib.SetExitKey(KeyboardKey.Null);
 
+    // Detecta los joysticks: raylib los enumera al atender los eventos del sistema, asi que hay
+    // que atenderlos al menos una vez. Se hace aqui (al arrancar) para que, la primera vez, el
+    // joystick quede como controlador y tambien sirve para saltar la intro.
+    for (int i = 0; i < 5; i++) { Raylib.PollInputEvents(); Thread.Sleep(20); }
+    Controller.ApplyDefaultPad();
+
     // Titulo de ventana con FPS, refrescado cada 500 ms
     long lastTitle = 0;
     bool titleShowsFps = Config.ShowFps() && !Config.FullScreen();

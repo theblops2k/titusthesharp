@@ -43,13 +43,14 @@ static class OptionsScreen
         while (true)
         {
             if (Raylib.WindowShouldClose()) return -1;
-            if (Input.Pressed(KeyboardKey.Escape)) return 0;
-            if (Input.Pressed(KeyboardKey.Up)) sel = (sel + n) % (n + 1);
-            if (Input.Pressed(KeyboardKey.Down)) sel = (sel + 1) % (n + 1);
+            Input.UpdatePad();
+            if (Input.Pressed(KeyboardKey.Escape) || Input.PadEscape()) return 0;
+            if (Input.Pressed(KeyboardKey.Up) || Input.PadUp()) sel = (sel + n) % (n + 1);
+            if (Input.Pressed(KeyboardKey.Down) || Input.PadDown()) sel = (sel + 1) % (n + 1);
             int d = 0;
-            bool ok = Input.Confirm(); // se lee una sola vez (Pressed consume el evento)
-            if (ok || Input.Pressed(KeyboardKey.Right)) d = 1;
-            if (Input.Pressed(KeyboardKey.Left)) d = -1;
+            bool ok = Input.Confirm() || Input.PadConfirm(); // se lee una sola vez (Pressed consume el evento)
+            if (ok || Input.Pressed(KeyboardKey.Right) || Input.PadRight()) d = 1;
+            if (Input.Pressed(KeyboardKey.Left) || Input.PadLeft()) d = -1;
             if (sel == n)
             {
                 if (ok) return 0;

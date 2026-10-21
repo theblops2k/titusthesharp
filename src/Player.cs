@@ -90,6 +90,8 @@ public static class Player
     static bool KeyUp() => Controller.Jump();
     static bool KeyDown() => Controller.Crouch();
     static bool KeySpace() => Controller.Action();
+    // "Arriba" para subir escaleras: con joystick vale el boton de salto o el direccional arriba
+    static bool KeyClimb() => Controller.Up();
     static short add_carry() => (short)(CARRY_FLAG ? 16 : 0);
 
     // player.c:57 move_player (partes 1, 2, 3 y 5 reducidas)
@@ -103,7 +105,7 @@ public static class Player
         bool left = KeyLeft(), right = KeyRight();
         bool jump = KeyUp(); // el espacio es coger/soltar (player.c:222)
         X_FLAG = left || right;
-        Y_FLAG = KeyUp() || KeyDown();
+        Y_FLAG = KeyClimb() || KeyDown();
 
         // TODO: FURTIF(+9)
         bool down = KeyDown();
@@ -376,7 +378,7 @@ public static class Player
                         if (Level.GetFloorFlag(level, (short)ty, (short)(tx - 1)) == FFLAG_LADDER) spr.x -= 16;
                         else if (Level.GetFloorFlag(level, (short)ty, (short)(tx + 1)) == FFLAG_LADDER) spr.x += 16;
                     }
-                    spr.speedY = (short)(!KeyUp() ? 4 * 16 : -(4 * 16));
+                    spr.speedY = (short)(!KeyClimb() ? 4 * 16 : -(4 * 16));
                 }
                 else spr.speedY = 0;
                 break;
@@ -1070,7 +1072,7 @@ public static class Player
                 }
                 if (floorAbove != FFLAG_LADDER)
                 {
-                    if (order == 0 || (KeyUp() && order == 6))
+                    if (order == 0 || (KeyClimb() && order == 6))
                     {
                         ARAB_BLOCK_YU(player);
                         return;
