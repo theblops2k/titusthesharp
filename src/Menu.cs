@@ -11,6 +11,10 @@ public static class Menu
     // Password (seleccion 1, menu.c:260-273): enterpassword; si es valido fija curlevel y vuelve al menu.
     static int curlevel = 1;
 
+    // En modo editor, START pregunta ORIGINAL/CUSTOM. Program usa esta bandera para
+    // iniciar la campaña de CustomLevels en lugar de los niveles originales.
+    internal static bool CustomMode;
+
     // Codigos de contrasena por nivel: Game.LevelCodes (se recalcula si cambia FinalExtraLevel)
 
     internal static string? MenuPath; // para que Game cargue la textura del menu (menu de pausa)
@@ -19,9 +23,10 @@ public static class Menu
     {
         Fonts.Load(Path.GetDirectoryName(path) ?? ".");
         MenuPath = path;
+        CustomMode = false;
         Texture2D tex = Title.LoadFormat2(path);
         SolidPassword(ref tex);
-        int r = Run(ref tex);
+        int r = Run(ref tex, Path.GetDirectoryName(path) ?? ".");
         Raylib.UnloadTexture(tex);
         return r;
     }
@@ -108,7 +113,7 @@ public static class Menu
             }
     }
 
-    static void Draw(Texture2D tex, int alpha, int selection, bool fadeOut, int quitSel = -1)
+    static void Draw(Texture2D tex, int alpha, int selection, bool fadeOut, int quitSel = -1, int startSel = -1)
     {
         Color tint = Title.FadeTint(alpha);
         Title.Begin();
@@ -128,6 +133,7 @@ public static class Menu
         Title.DrawRegion(tex, Sel[0], (int)Sel[selection].X, (int)Sel[selection].Y, tint);
         OverlayText(tex, "OPTIONS", 128, 184, alpha);
         if (quitSel >= 0) DrawQuitPopup(tex, quitSel);
+        if (startSel >= 0) DrawStartPopup(tex, startSel);
         Title.End();
     }
 
@@ -140,6 +146,42 @@ public static class Menu
         OverlayText(tex, "YES", 128, by + 22);
         OverlayText(tex, "NO", 128, by + 36);
         Title.DrawRegion(tex, Sel[0], 114, by + 24 + sel * 14, Color.White);
+    }
+
+    // Popup START del modo editor: mismo estilo que QUIT, con ORIGINAL / CUSTOM.
+    static void DrawStartPopup(Texture2D tex, int sel)
+    {
+        int s = Render.SCALE, bx = 100, by = 72;
+        Raylib.DrawRectangle(bx * s, by * s, 120 * s, 56 * s, new Color(0, 0, 0, 204));
+        OverlayTextPal("START", 140, by + 6);
+        OverlayText(tex, "ORIGINAL", 128, by + 22);
+        OverlayText(tex, "CUSTOM", 136, by + 36);
+        Title.DrawRegion(tex, Sel[0], 110, by + 24 + sel * 14, Color.White);
+    }
+
+    // Bucle del popup START. 0 = cancelar/volver al menu, 1 = original, 2 = custom, -2 = cerrar juego.
+    static int StartPopup(Texture2D tex, int selection)
+    {
+        int q = 0;
+        while (true)
+        {
+            if (Raylib.WindowShouldClose()) return -2;
+            Input.UpdatePad();
+            if (Input.Pressed(KeyboardKey.Escape) || Input.PadEscape()) return 0;
+            if (Input.Pressed(KeyboardKey.Up) || Input.PadUp()) q = Math.Max(0, q - 1);
+            if (Input.Pressed(KeyboardKey.Down) || Input.PadDown()) q = Math.Min(1, q + 1);
+            if (Input.Confirm() || Input.PadConfirm())
+            {
+                Input.ConsumePad();
+                Input.Consume(KeyboardKey.Enter);
+                Input.Consume(KeyboardKey.KpEnter);
+                Input.Consume(KeyboardKey.Space);
+                if (q == 0) return 1;
+                // Sin niveles en CustomLevels se cierra el popup y se queda en el menu.
+                return EditorCfg.CustomLevelFiles().Count > 0 ? 2 : 0;
+            }
+            Draw(tex, 255, selection, false, -1, q);
+        }
     }
 
     // Bucle del popup QUIT. Devuelve true si se elige YES. Cursor inicial en NO.
@@ -179,7 +221,7 @@ public static class Menu
         while (Raylib.GetKeyPressed() != 0) { }
     }
 
-    static int Run(ref Texture2D tex)
+    static int Run(ref Texture2D tex, string dir)
     {
         int selection = 0;
         long t0 = Environment.TickCount64;
@@ -206,11 +248,22 @@ public static class Menu
                     chosen = true;
                 Draw(tex, 255, selection, false);
             }
-            if (selection == 0) break;
+            if (selection == 0)
+            {
+                // En modo editor START elige entre campaña original y CustomLevels.
+                if (EditorCfg.Enabled())
+                {
+                    int start = StartPopup(tex, selection);
+                    if (start == -2) return -1;
+                    if (start == 0) { WaitRelease(); continue; }
+                    if (start == 2) CustomMode = true;
+                }
+                break;
+            }
             if (selection == 2)
             {
                 Crash.SetScreen("options");
-                if (OptionsScreen.Run(ref tex) < 0) return -1;
+                if (OptionsScreen.Run(ref tex, dir) < 0) return -1;
                 WaitRelease();
                 continue;
             }

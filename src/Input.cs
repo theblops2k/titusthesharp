@@ -35,6 +35,7 @@ static class Input
     // 13 SELECT (PS Share), 14 GUIDE (boton PS / XBOX), 15 START (PS Options), 16 L3, 17 R3
     public const int PadUpBtn = 1, PadRightBtn = 2, PadDownBtn = 3, PadLeftBtn = 4;
     public const int PadY = 5, PadB = 6, PadA = 7, PadX = 8;
+    public const int PadL1 = 9, PadR1 = 10;
     public const int PadSelect = 13, PadGuide = 14, PadStart = 15;
     public const int PadL3 = 16, PadR3 = 17;
     const float AxisDead = 0.5f; // zona muerta del stick izquierdo
@@ -100,6 +101,10 @@ static class Input
 
     // Cualquier boton del pad con flanco en este frame
     public static bool PadAnyButton() => PadActive() && edgeButtons != 0;
+
+    // Botones L1/R1: nivel anterior / siguiente en el visor de niveles
+    public static bool PadPrev() => PadActive() && (edgeButtons & (1 << PadL1)) != 0;
+    public static bool PadNext() => PadActive() && (edgeButtons & (1 << PadR1)) != 0;
 
     // ---------------------------------------------------------------- saltar ventanas
     // Donde ENTER (o ESPACIO) salta de ventana: con joystick configurado, tambien el boton A.

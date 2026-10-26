@@ -52,16 +52,12 @@ public static class Game
     public const int ExtraIndex = 14; // posicion de LEVELD (codigo 3B9C), antes del ending
     public static int LevelCount => LevelFiles.Length;
 
-    static string Original_Dir = "";
+    // Orden de niveles para el visor/editor (misma lista que usa el juego)
+    internal static string[] LevelFilesForViewer => LevelFiles;
 
-    public static bool Run(string dir, int firstlevel)
+    // engine.c:122 loadobjects: datos de comportamiento de los 71 objetos (los usa el visor tambien)
+    internal static TITUS_objectdata[] BuildObjectData()
     {
-        if (firstlevel < 0 || firstlevel >= LevelFiles.Length) return true;
-        Original_Dir = dir;
-
-        Original.InitOriginal();
-        // engine.c:101-107 sprites; engine.c:122 loadobjects
-        var sprites = Sprites.LoadSprites(File.ReadAllBytes(Path.Combine(dir, "SPREXP.bin")));
         var objects = new TITUS_objectdata[Original.ORIG_OBJECT_COUNT];
         for (int i = 0; i < objects.Length; i++)
             objects[i] = new TITUS_objectdata
@@ -73,22 +69,81 @@ public static class Game
                 droptobottom = Original.OBJECT_DROPTOBOTTOM[i],
                 no_damage = Original.OBJECT_NO_DAMAGE[i],
             };
+        return objects;
+    }
+
+    static string Original_Dir = "";
+
+    public static bool Run(string dir, int firstlevel)
+        => RunLevels(dir, firstlevel, LevelFiles, false);
+
+    // Campaña formada por los niveles que haya en CustomLevels (orden canonico).
+    // Si no hay ninguno no se inicia nada; el menu ya impide llegar aqui.
+    public static bool RunCustom(string dir)
+    {
+        string[] files = EditorCfg.CustomLevelFiles().ToArray();
+        if (files.Length == 0) return true;
+        return RunLevels(dir, 0, files, true);
+    }
+
+    // Probar un unico nivel desde el editor. leveldata es el estado actual en
+    // memoria, asi se prueban tambien los cambios sin guardar.
+    public static bool RunTest(string dir, string file, byte[] leveldata)
+    {
+        if (leveldata == null || leveldata.Length < 35828) return true;
+        Original_Dir = dir;
+        Original.InitOriginal();
+
+        var sprites = Sprites.LoadSprites(File.ReadAllBytes(Path.Combine(dir, "SPREXP.bin")));
+        var objects = BuildObjectData();
+
+        var level = new TITUS_level { levelnumber = 0, lives = Config.LivesAtStart(), extrabonus = 0 };
+        level.levelid = EditorCfg.LevelIdForFile(file);
+        Level.LoadLevel(level, leveldata, sprites, objects);
+        int paletteLevel = EditorCfg.KnownLevelIndex(file);
+        if (paletteLevel >= 0 && paletteLevel < OriginalTables.PaletteLevelColour.GetLength(0))
+            for (int k = 0; k < 3; k++)
+                level.palette[14, k] = OriginalTables.PaletteLevelColour[paletteLevel, k];
+
+        Fonts.Load(dir); // el editor salta la pantalla de estado, que es quien suele cargarlas
+        Render.Init();
+        Crash.SetLevel(level);
+        Audio.SelectMusic(Original.LEVEL_MUSIC[level.levelid]);
+
+        ClearData(level);
+        InitScreenM(level);
+        exitCode = 0;
+        if (!OpenScreen(level)) return false;
+        return PlayLevel(level);
+    }
+
+    static bool RunLevels(string dir, int firstlevel, string[] files, bool custom)
+    {
+        if (firstlevel < 0 || firstlevel >= files.Length) return true;
+        Original_Dir = dir;
+
+        Original.InitOriginal();
+        // engine.c:101-107 sprites; engine.c:122 loadobjects
+        var sprites = Sprites.LoadSprites(File.ReadAllBytes(Path.Combine(dir, "SPREXP.bin")));
+        var objects = BuildObjectData();
 
         // engine.c:131-145
         var level = new TITUS_level { levelnumber = (short)firstlevel, lives = Config.LivesAtStart(), extrabonus = 0 };
         Render.Init();
         bool ok = true;
         // engine.c:136 bucle de niveles: avanza mientras NEWLEVEL_FLAG termine el nivel
-        for (level.levelnumber = (short)firstlevel; level.levelnumber < LevelFiles.Length && ok; level.levelnumber++)
+        for (level.levelnumber = (short)firstlevel; level.levelnumber < files.Length && ok; level.levelnumber++)
         {
-        string lfile = LevelFiles[level.levelnumber];
-        level.levelid = Original.GetLevelId(level.levelnumber);
-        // Los 2 ultimos niveles no siguen la correspondencia por numero (el nivel extra se coloca antes
-        // del ending): LEVELD = 13 (letra D) y LEVELG = 16 (el ending, reset.c:68).
-        if (lfile == "LEVELD") level.levelid = 13;
-        else if (lfile == "LEVELG") level.levelid = 16;
-        byte[] leveldata = File.ReadAllBytes(Path.Combine(dir, lfile + ".bin"));
+        string lfile = files[level.levelnumber];
+        level.levelid = EditorCfg.LevelIdForFile(lfile);
+        byte[] leveldata = File.ReadAllBytes(custom
+            ? EditorCfg.CustomLevelPath(lfile)
+            : EditorCfg.OriginalLevelPath(dir, lfile));
         Level.LoadLevel(level, leveldata, sprites, objects);
+        int paletteLevel = EditorCfg.KnownLevelIndex(lfile);
+        if (paletteLevel >= 0 && paletteLevel < OriginalTables.PaletteLevelColour.GetLength(0))
+            for (int k = 0; k < 3; k++)
+                level.palette[14, k] = OriginalTables.PaletteLevelColour[paletteLevel, k];
         Crash.SetLevel(level); // CrashLog.cs: contexto de crash
         Audio.SelectMusic(0); // engine.c:158
         if (!ShowStatus(dir, level)) { ok = false; break; }
@@ -117,7 +172,7 @@ public static class Game
         if (exitCode == 2 || exitCode == 5) break; // game over / ESC: al menu
         }
         // engine.c:255-258: tras el ultimo nivel (no por game over ni salida) pantalla final (titus.conf:69 LEVELA.SQZ, formato 0)
-        if (ok && exitCode != 2 && exitCode != 5 && level.levelnumber >= LevelFiles.Length)
+        if (ok && exitCode != 2 && exitCode != 5 && level.levelnumber >= files.Length)
             ok = Title.ViewUntilKey(Path.Combine(dir, "LEVELA.bin"));
         return ok;
     }

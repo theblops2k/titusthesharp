@@ -79,7 +79,8 @@ try
             Crash.SetScreen("menu");
             int level = Menu.View(menuPath);
             if (level < 1) break;
-            if (!Game.Run(dir, level - 1)) break;
+            bool running = Menu.CustomMode ? Game.RunCustom(dir) : Game.Run(dir, level - 1);
+            if (!running) break;
             Audio.SelectMusic(15); // de vuelta del nivel: corta la musica del juego y pone la del menu principal
         }
     }

@@ -7,20 +7,30 @@ static class OptionsScreen
 {
     static readonly string[] GfxKeys =
         { "Bilinear", "SharpBilinear", "XBR", "Scale3x", "FSR", "Vibrance", "Scanlines" };
-    // null = fila especial (submenus de la pantalla principal; BACK siempre al final)
-    static readonly string?[] MainKeys = { "FullScreen", "WideScreen", "Fps", "ShowFps", "LivesAtStart", "FinalExtraLevel", "Volume", null, null };
-    static readonly string[] MainSpecial = { "CONTROLLER", "GRAPHIC FILTERS" };
+    // null = fila especial (submenus de la pantalla principal; BACK siempre al final).
+    // LEVEL EDITOR solo aparece con Editor.cfg (MODE=ON) junto al exe.
+    static (string?[] Keys, string[] Special) MainRows()
+    {
+        var keys = new List<string?> { "FullScreen", "WideScreen", "Fps", "ShowFps", "LivesAtStart", "FinalExtraLevel", "Volume", null, null };
+        var special = new List<string> { "CONTROLLER", "GRAPHIC FILTERS" };
+        if (EditorCfg.Enabled()) { keys.Add(null); special.Add("LEVEL EDITOR"); }
+        return (keys.ToArray(), special.ToArray());
+    }
 
-    const int Y0 = 26, Step = 14; // 9 filas + BACK: 26 + 9*14 + 12 = 164 <= 200
+    const int Y0 = 26, Step = 14; // 10 filas + BACK: 26 + 10*14 + 12 = 178 <= 200
 
     // Devuelve 0 al volver con ESC/BACK, -1 si se cierra la ventana
-    public static int Run(ref Texture2D tex)
+    public static int Run(ref Texture2D tex, string dir)
     {
+        EditorCfg.Reload(); // permite habilitar/deshabilitar el visor editando Editor.cfg
         while (true)
         {
-            int r = Page(ref tex, "OPTIONS", MainKeys, MainSpecial);
+            var (keys, special) = MainRows();
+            int r = Page(ref tex, "OPTIONS", keys, special);
             if (r < 1) return r;
-            r = r == 1 ? ControllerScreen.Run(ref tex) : Page(ref tex, "GRAPHIC FILTERS", GfxKeys);
+            if (r == 1) r = ControllerScreen.Run(ref tex);
+            else if (r == 2) r = Page(ref tex, "GRAPHIC FILTERS", GfxKeys);
+            else r = LevelViewer.Run(dir); // r == 3: solo existe con el modo editor activo
             if (r < 0) return r;
             Menu.WaitRelease(); // BACK del submenu: no reabrir ni propagar la tecla
         }

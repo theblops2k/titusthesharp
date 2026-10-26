@@ -30,7 +30,6 @@ public static class Player
     static bool DROPREADY_FLAG;  // espacio liberado: se puede soltar/lanzar
     static bool POSEREADY_FLAG;  // ya se cogio/dejo en esta pulsacion
     internal static byte CROSS_FLAG;      // se activa al agacharse (accion 5, ACTION_TIMER == 15)
-    static bool POCKET_FLAG;
     static bool PRIER_FLAG;      // techo bajo (agacharse forzado); TODO: FORCE_POSE con objeto
     const byte FFLAG_LADDER = 6;
 
@@ -68,7 +67,6 @@ public static class Player
         DROPREADY_FLAG = false;
         POSEREADY_FLAG = false;
         SENSX = 0;
-        POCKET_FLAG = false;
         PRIER_FLAG = false;
         CHOC_FLAG = 0;
         KICK_FLAG = 0;
@@ -815,7 +813,6 @@ public static class Player
     // player.c:883
     static void ARAB_BLOCK_YU(TITUS_player player)
     {
-        POCKET_FLAG = true;
         player.GLISSE = 0;
         if (player.sprite.speedY < 0)
         {
@@ -945,7 +942,6 @@ public static class Player
     {
         TITUS_player player = level.player;
         TITUS_sprite spr = player.sprite;
-        POCKET_FLAG = false;
         PRIER_FLAG = false;
         Scroll.LADDER_FLAG = false;
 

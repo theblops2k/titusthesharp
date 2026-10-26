@@ -462,7 +462,6 @@ sealed class Opl2
     byte reg08, regBD, vibratoIndex, tremoloIndex, vibratoShift, tremoloValue, vibratoStrength, tremoloStrength, waveFormMask;
     int vibratoSign;
     readonly byte opl3Active = 0; // solo OPL2
-    bool waveSetFlag;
 
     public Opl2() : this(44100) { }
 
