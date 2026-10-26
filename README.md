@@ -2,6 +2,7 @@
 
 Port de *Titus the Fox* (1992) a C# con raylib, derivado de OpenTitus.
 Requiere tu propia copia de *Titus the Fox* (1992). Este programa no incluye los datos del juego.
+¡Incluye un editor y creador de niveles!
 Si te gusta el juego, puedes comprarlo en:
 
 Steam: https://store.steampowered.com/app/711230/Titus_the_Fox
@@ -69,6 +70,55 @@ La pantalla CONTROLLER detecta el tipo de mando a partir del nombre que reporta 
 
 La misma tecla no puede controlar dos acciones, ni el mismo botón dos acciones del joystick (los botones del D-pad tampoco se pueden asignar a saltar o acción, porque son de las direcciones). Si al capturar una tecla o un botón que ya está en uso, se muestra `KEY ALREADY IN USE` / `BUTTON ALREADY IN USE` y no se asigna. Si editás el archivo a mano y dejas dos acciones con la misma tecla, al arrancar se descarta la repetida y esa acción recibe una tecla libre.
 
+## Editor de niveles (opcional)
+
+El editor está desactivado por defecto y no se crea solo. Para habilitarlo, creá un archivo `Editor.cfg` junto al ejecutable con:
+
+```
+MODE=ON
+```
+
+Sin ese archivo (o con otro valor) el juego funciona igual y la opción no aparece. El editor se abre desde **OPTIONS → LEVEL EDITOR**.
+
+Los cambios se guardan únicamente en `CustomLevels\LEVELx.bin`, junto al ejecutable. Los archivos originales de `FILES\` no se modifican.
+
+### Niveles
+
+- **NEW LEVEL** crea un nivel vacío. Se elige el nivel original del que se copia el tileset completo (256 tiles), el slot `LEVELx` libre y la altura. El nivel nuevo incluye piso sólido, START y FINISH.
+- **IMPORT LEVEL** copia un nivel original a `CustomLevels` para poder editarlo.
+- La lista izquierda muestra solo los niveles de `CustomLevels`. La `x` de cada fila, o la tecla `Delete`, elimina el nivel con confirmación. Si borrás el nivel abierto, se carga el siguiente o queda vacío.
+- Con el editor activo, el popup **START** del menú permite elegir **ORIGINAL** o **CUSTOM**. CUSTOM solo aparece si hay niveles en `CustomLevels`.
+
+### Edición
+
+- **VIEW / EDIT** alterna entre el visor y el modo de edición.
+- Capas: `TILES`, `BONUSES`, `ENEMIES`, `OBJECTS`, `ELEVATORS` y `GATES` (teclas `1`..`6`). `7` muestra la sólidez, `8` el minimapa y `G` la rejilla.
+- **CHANGE** abre el catálogo del tipo de entidad de la capa actual:
+  - enemigos: 100 presets tomados de los niveles originales. Los **5 bosses** aparecen marcados como `BOSS` y primero; el enemigo por defecto sigue siendo uno normal.
+  - objetos: los **71 objetos** soportados por el motor, con vista previa y comportamiento (`SUPPORT`, `BOUNCE`, `GRAVITY`, `SPEED`, etc.).
+- **TEST LEVEL** o `F5` juega el nivel actual usando la copia en memoria, incluidos los cambios sin guardar. Al terminar, morir o salir con `Esc`, vuelve al editor. No sobrescribe el `.bin`.
+- `Ctrl+S` guarda. `F1` abre la ayuda con todos los atajos.
+
+### Atajos del editor
+
+| Tecla / acción | Función |
+|---|---|
+| `Tab` | VIEW / EDIT |
+| `1`..`8`, `G` | Mostrar/ocultar capas, sólidez, minimapa y rejilla |
+| Flechas / `WASD` | Mover la cámara; `Shift` acelera |
+| `PgUp` / `PgDn` | Nivel anterior / siguiente |
+| `Home` | Centrar en START |
+| `N` / `I` | Nuevo nivel / importar |
+| `F5` | Probar el nivel actual |
+| `Delete` | Eliminar el nivel seleccionado (con confirmación) |
+| `Ctrl+S` | Guardar |
+| `F1` | Ayuda |
+| `Esc` | Volver al menú (pide confirmación si hay cambios sin guardar) |
+| Botón izquierdo | Pintar, mover o arrastrar |
+| Botón derecho | Borrar |
+| Botón central o `Espacio` + arrastrar | Desplazar la vista |
+| Rueda | Zoom |
+
 ## Compilar
 
 Requiere .NET 10 SDK.
@@ -103,6 +153,7 @@ Si el juego se cierra por un error, se escribe `Log_error.txt` junto al ejecutab
 - **Salida**: ESC en el menú principal abre un popup QUIT con YES y NO. En el original, ESC salía directo.
 - **Vidas iniciales**: el original arranca con 2 vidas; el port usa 3 por defecto, configurable con `LivesAtStart` (1 a 30).
 - **Nivel extra**: `FinalExtraLevel` agrega un nivel oculto antes de la pantalla final. Solo se puede abrir desde el menú con la contraseña `3B9C` si esa opción está activa (en el original no se aceptaba).
+- **Campaña custom**: con `Editor.cfg` activo, START permite elegir entre la campaña original y los niveles guardados en `CustomLevels`.
 - **Pulsaciones**: se filtran las pulsaciones repetidas de P, ESC y los menús, para que una sola pulsación no cuente dos veces.
 - **Menú principal**: se agrega un menú de OPTIONS que no existe en el juego original. Se pueden configurar todos los parámetros del `TitusTheFox.cfg` desde la interfaz del juego. El texto PASSWORD se pintó de un solo color, como START (el original tenía un degradé).
 - **Velocidad**: la lógica sigue a 35 ticks por segundo, como el original, pero el dibujo va a 60 fps (configurable con `Fps`, hasta 240), con interpolación de sprites y fondo. Compatible con WideScreen.
@@ -133,6 +184,7 @@ Si el juego se cierra por un error, se escribe `Log_error.txt` junto al ejecutab
 - Registro de errores (`Log_error.txt`).
 - Filtro de pulsaciones para evitar dobles registros de tecla.
 - Nivel extra opcional y acceso por contraseña.
+- Editor de niveles opcional (`Editor.cfg` con `MODE=ON`): niveles custom, selector de enemigos con bosses, selector de objetos y prueba inmediata del nivel.
 - Soporte de joystick en los menús y en los saltos de pantalla, con detección del tipo de mando.
 - Múltiples fixes.
 - Resto del port en C#, incluida la lógica de niveles, enemigos y pantallas, traducida de OpenTitus y adaptada.
